@@ -1,3 +1,4 @@
+// packages/database/src/index.ts
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from './schema';
@@ -16,6 +17,11 @@ if (!databaseUrl) {
 // Create the Neon HTTP client
 const sql = neon(databaseUrl);
 
-// Export the initialized Drizzle instance and schema
+// Export the initialized Drizzle instance
 export const db = drizzle(sql, { schema });
+
+// Re-export individual schema items directly (e.g., import { customers } from '@mavora/database')
+export * from './schema';
+
+// Re-export the schema namespace (e.g., import { schema } from '@mavora/database')
 export { schema };

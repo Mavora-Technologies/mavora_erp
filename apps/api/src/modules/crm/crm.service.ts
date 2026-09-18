@@ -1,18 +1,18 @@
 import { db, customers } from '@mavora/database';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 
 export interface CreateCustomerInput {
   name: string;
-  email: string;
   contact_person?: string;
+  email: string;
   phone?: string;
-  status?: string;
   company?: string;
+  status?: string;
 }
 
 export class CrmService {
   async getCustomers() {
-    return await db.select().from(customers);
+    return await db.select().from(customers).orderBy(desc(customers.createdAt));
   }
 
   async getCustomerById(id: string) {
@@ -20,11 +20,13 @@ export class CrmService {
       throw { status: 400, message: 'Customer ID is required' };
     }
 
-    const [customer] = await db
+    const customerResult = await db
       .select()
       .from(customers)
       .where(eq(customers.id, id))
       .limit(1);
+
+    const customer = customerResult[0];
 
     if (!customer) {
       throw { status: 404, message: 'Customer not found' };
@@ -34,26 +36,25 @@ export class CrmService {
   }
 
   async createCustomer(data: CreateCustomerInput) {
-    const { name, email, contact_person, phone, company, status } = data;
+    const { name, contact_person, email, phone, company, status } = data;
 
     if (!name || !email) {
       throw { status: 400, message: 'Name and email are required' };
     }
 
-    const [newCustomer] = await db
+    const result = await db
       .insert(customers)
       .values({
         name,
+        contactPerson: contact_person,
         email,
-        contact_person,
         phone,
         company,
         status: status || 'Lead',
-        createdAt: new Date(),
       })
       .returning();
 
-    return newCustomer;
+    return result[0];
   }
 }
 

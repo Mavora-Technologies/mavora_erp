@@ -38,3 +38,14 @@ export const users = pgTable('users', {
   roleId: uuid('role_id').references(() => roles.id).notNull(),
   ...timestamps,
 });
+
+export const customers = pgTable('customers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  contactPerson: varchar('contact_person', { length: 255 }),
+  email: varchar('email', { length: 255 }).notNull(),
+  phone: varchar('phone', { length: 50 }),
+  company: varchar('company', { length: 255 }),
+  status: varchar('status', { length: 50 }).default('Lead').notNull(),
+  ...timestamps,
+});
