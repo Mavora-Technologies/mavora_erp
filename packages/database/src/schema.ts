@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, text } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, text, integer, decimal } from 'drizzle-orm/pg-core';
 
 // Reusable timestamp fields for audit logging
 const timestamps = {
@@ -46,6 +46,96 @@ export const customers = pgTable('customers', {
   email: varchar('email', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 50 }),
   company: varchar('company', { length: 255 }),
-  status: varchar('status', { length: 50 }).default('Lead').notNull(),
+  status: varchar('status', { length: 50 }).default('Active').notNull(), // Health of the account (Active/Inactive)
+  lifecycleStage: varchar('lifecycle_stage', { length: 50 }).default('Lead').notNull(), // The pipeline stage
   ...timestamps,
+});
+
+export const deals = pgTable('deals', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  customerId: uuid('customer_id').references(() => customers.id).notNull(),
+  title: varchar('title', { length: 255 }).notNull(), // e.g., "Q4 Enterprise Licensing"
+  value: integer('value').notNull(), // Stored in cents or base currency unit
+  currency: varchar('currency', { length: 10 }).default('USD').notNull(),
+  
+  // Sales Pipeline Stages
+  stage: varchar('stage', { length: 50 }).default('Discovery').notNull(), 
+  
+  // Win/Loss probability (0-100)
+  probability: integer('probability').default(20),
+  
+  expectedCloseDate: timestamp('expected_close_date'),
+  notes: text('notes'),
+  ...timestamps,
+});
+
+export const suppliers = pgTable('suppliers', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  contactPerson: text('contact_person'),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  address: text('address'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const purchaseOrders = pgTable('purchase_orders', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  supplierId: text('supplier_id').references(() => suppliers.id).notNull(),
+  createdById: uuid('created_by_id').references(() => users.id).notNull(), // Tracks who created the LPO
+  poNumber: text('po_number').notNull().unique(),
+  status: text('status').default('Draft').notNull(), // Draft, Sent, Approved, Received, Cancelled
+  totalAmount: decimal('total_amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').default('USD').notNull(),
+  expectedDate: timestamp('expected_date', { withTimezone: true }),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const purchaseOrderItems = pgTable('purchase_order_items', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  purchaseOrderId: text('purchase_order_id').references(() => purchaseOrders.id, { onDelete: 'cascade' }).notNull(),
+  productId: text('product_id').references(() => products.id).notNull(),
+  quantity: integer('quantity').notNull(),
+  unitPrice: decimal('unit_price', { precision: 12, scale: 2 }).notNull(),
+  totalPrice: decimal('total_price', { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const products = pgTable('products', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  sku: text('sku').notNull().unique(),
+  name: text('name').notNull(),
+  description: text('description'),
+  category: text('category'), // e.g., IT Equipment, Office Supplies, Hardware
+  location: text('location').default('Nairobi HQ').notNull(), // Corporate Location
+  department: text('department').default('Operations').notNull(), // Owning Department
+  costPrice: decimal('cost_price', { precision: 12, scale: 2 }).notNull(), // Procurement Cost in KES
+  stockQuantity: integer('stock_quantity').default(0).notNull(),
+  reorderLevel: integer('reorder_level').default(5).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const tickets = pgTable('tickets', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  ticketNumber: text('ticket_number').notNull().unique(), // e.g., TKT-2026-1042
+  title: text('title').notNull(),
+  description: text('description'),
+  status: text('status').default('OPEN').notNull(), // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority: text('priority').default('MEDIUM').notNull(), // LOW, MEDIUM, HIGH, URGENT
+  ticketType: text('ticket_type').default('CLIENT').notNull(), // CLIENT or INTERNAL
+  source: text('source').default('WEBSITE').notNull(), // PHONE, WEBSITE, WALK_IN, EMAIL
+  clientName: text('client_name'), // Name of client / contact person
+  companyName: text('company_name'), // Client company name (if applicable)
+  category: text('category').default('Software Development').notNull(), // Mavora Service or Internal Category
+  location: text('location').default('Nairobi HQ').notNull(),
+  department: text('department').default('Client Services').notNull(),
+  requesterName: text('requester_name').notNull(), // Person logging/submitting the ticket
+  assignee: text('assignee').default('Unassigned'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

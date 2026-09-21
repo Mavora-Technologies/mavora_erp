@@ -56,6 +56,26 @@ export class CrmService {
 
     return result[0];
   }
+
+  async updateCustomerStage(id: string, stage: string) {
+    const validStages = ['Lead', 'Prospect', 'Opportunity', 'Client', 'Advocate'];
+    
+    if (!validStages.includes(stage)) {
+      throw { status: 400, message: 'Invalid lifecycle stage' };
+    }
+
+    const result = await db
+      .update(customers)
+      .set({ lifecycleStage: stage, updatedAt: new Date() })
+      .where(eq(customers.id, id))
+      .returning();
+
+    if (!result.length) {
+      throw { status: 404, message: 'Customer not found' };
+    }
+
+    return result[0];
+  }
 }
 
 export const crmService = new CrmService();

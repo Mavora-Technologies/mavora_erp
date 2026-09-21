@@ -52,3 +52,23 @@ export const createCustomer = async (req: Request, res: Response, next: NextFunc
     next(error);
   }
 };
+
+export const updateCustomerStage = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { stage } = req.body;
+    
+    const result = await crmService.updateCustomerStage(id, stage);
+
+    res.json({
+      success: true,
+      message: `Customer successfully advanced to ${stage}`,
+      data: result
+    });
+  } catch (error: any) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
+};
