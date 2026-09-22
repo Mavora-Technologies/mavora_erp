@@ -6,6 +6,7 @@ import { salesModule } from '../modules/sales/sales.module.js';
 import { procurementModule } from '../modules/procurement/procurement.module.js';
 import { inventoryModule } from '../modules/inventory/inventory.module.js';
 import { helpdeskRoutes } from '../modules/helpdesk/helpdesk.routes.js';
+import { hrmModule } from '../modules/hrm/hrm.module.js';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.use('/sales', salesModule.router);
 router.use('/procurement', procurementModule.router);
 router.use('/inventory', inventoryModule.router);
 router.use('/helpdesk', helpdeskRoutes);
-
+router.use('/hrm', hrmModule.router);
 // Health Check Endpoint
 router.get('/health', (req, res) => {
   res.json({

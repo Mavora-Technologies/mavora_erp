@@ -139,3 +139,38 @@ export const tickets = pgTable('tickets', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const departments = pgTable('departments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 100 }).notNull().unique(),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const employees = pgTable('employees', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id).notNull().unique(),
+  departmentId: uuid('department_id').references(() => departments.id).notNull(),
+  employeeNumber: varchar('employee_number', { length: 50 }).notNull().unique(),
+  jobTitle: varchar('job_title', { length: 100 }).notNull(),
+  employmentType: varchar('employment_type', { length: 50 }).default('Full-Time').notNull(), // Full-Time, Part-Time, Contractor
+  hireDate: timestamp('hire_date').notNull(),
+  salary: decimal('salary', { precision: 12, scale: 2 }),
+  status: varchar('status', { length: 50 }).default('Active').notNull(), // Active, On Leave, Terminated
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const leaveRequests = pgTable('leave_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  employeeId: uuid('employee_id').references(() => employees.id, { onDelete: 'cascade' }).notNull(),
+  leaveType: varchar('leave_type', { length: 50 }).notNull(), // Annual, Sick, Maternity, Unpaid
+  startDate: timestamp('start_date').notNull(),
+  endDate: timestamp('end_date').notNull(),
+  reason: text('reason'),
+  status: varchar('status', { length: 50 }).default('Pending').notNull(), // Pending, Approved, Rejected
+  approvedBy: uuid('approved_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
