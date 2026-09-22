@@ -6,7 +6,10 @@ import path from 'path';
 import routes from './routes/index.js'; 
 import { errorHandler } from './middleware/error.middleware.js';
 
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+// Only load local .env in development
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -17,13 +20,17 @@ const allowedOrigins = [
   'https://mavora-erp.pages.dev',
 ];
 
-// Configure CORS directly with array of allowed origins
-app.use(cors({
+const corsOptions = {
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+};
+
+// Apply CORS
+app.use(cors(corsOptions));
+// Explicitly handle preflight for all routes
+app.options('*', cors(corsOptions));
 
 app.use(helmet());
 app.use(express.json());
