@@ -7,6 +7,9 @@ import { procurementModule } from '../modules/procurement/procurement.module.js'
 import { inventoryModule } from '../modules/inventory/inventory.module.js';
 import { helpdeskRoutes } from '../modules/helpdesk/helpdesk.routes.js';
 import { hrmModule } from '../modules/hrm/hrm.module.js';
+import projectsRoutes from '../modules/projects/projects.routes.js';
+import financeRoutes from '../modules/finance/finance.routes.js';
+import settingsRoutes from '../modules/settings/settings.routes.js';
 
 const router = Router();
 
@@ -18,6 +21,10 @@ router.use('/procurement', procurementModule.router);
 router.use('/inventory', inventoryModule.router);
 router.use('/helpdesk', helpdeskRoutes);
 router.use('/hrm', hrmModule.router);
+router.use('/projects', projectsRoutes);
+router.use('/finance', financeRoutes);
+router.use('/settings', settingsRoutes);
+
 // Health Check Endpoint
 router.get('/health', (req, res) => {
   res.json({

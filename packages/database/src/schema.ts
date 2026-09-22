@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, boolean, text, integer, decimal } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, timestamp, boolean, text, integer, decimal, jsonb } from 'drizzle-orm/pg-core';
 
 // Reusable timestamp fields for audit logging
 const timestamps = {
@@ -173,4 +173,54 @@ export const leaveRequests = pgTable('leave_requests', {
   approvedBy: uuid('approved_by').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const projects = pgTable('projects', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'cascade' }).notNull(),
+  managerId: uuid('manager_id').references(() => users.id),
+  status: varchar('status', { length: 50 }).default('Planning').notNull(), // Planning, In Progress, On Hold, Completed, Cancelled
+  priority: varchar('priority', { length: 50 }).default('Medium').notNull(), // Low, Medium, High, Urgent
+  budget: decimal('budget', { precision: 12, scale: 2 }),
+  startDate: timestamp('start_date'),
+  dueDate: timestamp('due_date'),
+  ...timestamps,
+});
+
+export const projectTasks = pgTable('project_tasks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  description: text('description'),
+  status: varchar('status', { length: 50 }).default('To Do').notNull(), // To Do, In Progress, Review, Done
+  priority: varchar('priority', { length: 50 }).default('Medium').notNull(),
+  assignedTo: uuid('assigned_to').references(() => users.id),
+  dueDate: timestamp('due_date'),
+  ...timestamps,
+});
+
+export const invoices = pgTable('invoices', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  invoiceNumber: varchar('invoice_number', { length: 50 }).notNull().unique(),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'cascade' }).notNull(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+  status: varchar('status', { length: 50 }).default('Draft').notNull(), // Draft, Sent, Paid, Overdue, Cancelled
+  issueDate: timestamp('issue_date').defaultNow().notNull(),
+  dueDate: timestamp('due_date'),
+  notes: text('notes'),
+  ...timestamps,
+});
+
+export const settings = pgTable('settings', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  companyName: varchar('company_name', { length: 255 }).notNull().default('Mavora Enterprise'),
+  supportEmail: varchar('support_email', { length: 255 }).default('support@mavora.io'),
+  timezone: varchar('timezone', { length: 100 }).default('UTC'),
+  currency: varchar('currency', { length: 10 }).default('USD'),
+  taxRate: varchar('tax_rate', { length: 10 }).default('0.00'),
+  moduleFlags: jsonb('module_flags').default({ crm: true, projects: true, finance: true }).notNull(),
+  ...timestamps,
 });
