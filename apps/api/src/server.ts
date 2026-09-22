@@ -18,6 +18,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://erp.mavoratechnologies.com',
   'https://mavora-erp.pages.dev',
+  'https://mavora-erp-api-virid.vercel.app'
 ];
 
 const corsOptions = {
