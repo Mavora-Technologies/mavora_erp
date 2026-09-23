@@ -12,10 +12,20 @@ export class AuthService {
       throw { status: 400, message: 'Email and password are required' };
     }
 
-    // 1. Find user
+    // 1. Join users with roles to fetch actual role details
     const userResult = await db
-      .select()
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        passwordHash: schema.users.passwordHash,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        isActive: schema.users.isActive,
+        roleId: schema.users.roleId,
+        roleName: schema.roles.name,
+      })
       .from(schema.users)
+      .leftJoin(schema.roles, eq(schema.users.roleId, schema.roles.id))
       .where(eq(schema.users.email, email))
       .limit(1);
 
@@ -35,13 +45,18 @@ export class AuthService {
       throw { status: 401, message: 'Invalid credentials' };
     }
 
-    // 4. Update last login (fire and forget)
-    await db.update(schema.users).set({ lastLogin: new Date() }).where(eq(schema.users.id, user.id));
+    // 4. Update last login timestamp
+    await db
+      .update(schema.users)
+      .set({ lastLogin: new Date() })
+      .where(eq(schema.users.id, user.id));
 
-    // 5. Generate Token
+    // 5. Generate Token containing essential user IDs
     const token = generateToken({ userId: user.id, roleId: user.roleId });
 
-    // 6. Return response payload
+    // 6. Return standard user metadata payload
+    const fullName = `${user.firstName} ${user.lastName}`.trim();
+
     return {
       token,
       user: {
@@ -49,8 +64,10 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        roleId: user.roleId
-      }
+        name: fullName,
+        role: user.roleName || 'EMPLOYEE',
+        roleId: user.roleId,
+      },
     };
   }
 }

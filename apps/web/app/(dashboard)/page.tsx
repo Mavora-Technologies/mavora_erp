@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   TrendingUp, 
   Users, 
@@ -12,11 +13,82 @@ import {
   Package, 
   HelpCircle,
   AlertCircle,
-  Activity
+  Activity,
+  ShieldAlert,
+  Lock
 } from 'lucide-react';
 
+// Roles explicitly granted access to the Executive Dashboard
+const ALLOWED_ROLES = ['SUPER_ADMIN', 'ADMINISTRATOR', 'EXECUTIVE', 'ADMIN'];
+
 export default function Dashboard() {
-  // Mapping metrics to all 8 core operational modules
+  const router = useRouter();
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedUser = localStorage.getItem('mavora_user');
+      if (!storedUser) {
+        setIsAuthorized(false);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(storedUser);
+        // Normalize role check (case-insensitive)
+        const role = (parsed?.role || parsed?.role_name || '').toString().toUpperCase().trim();
+        
+        if (ALLOWED_ROLES.includes(role)) {
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+        }
+      } catch (err) {
+        console.error('Failed to parse session user:', err);
+        setIsAuthorized(false);
+      }
+    }
+  }, []);
+
+  // 1. Loading State while checking permissions
+  if (isAuthorized === null) {
+    return (
+      <div className="flex h-[70vh] w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-[#075BFF] border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-gray-500">Verifying access permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Access Restricted State for unauthorized roles
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[65vh] p-6 text-center">
+        <div className="w-16 h-16 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-center mb-4 text-rose-600 shadow-xs">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-[#061A3A] tracking-tight">Access Restricted</h2>
+        <p className="text-sm text-gray-500 max-w-md mt-2">
+          The Executive Dashboard is strictly reserved for higher-level management roles.
+        </p>
+        
+        <div className="mt-5 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-600 font-medium space-y-2 max-w-md w-full">
+          <div className="flex items-center gap-1.5 justify-center font-bold text-slate-700">
+            <Lock className="w-3.5 h-3.5 text-rose-500" /> Authorized Roles Only:
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <span className="px-2 py-1 bg-blue-50 border border-blue-200 text-[#075BFF] font-bold rounded-md">SUPER_ADMIN</span>
+            <span className="px-2 py-1 bg-blue-50 border border-blue-200 text-[#075BFF] font-bold rounded-md">ADMINISTRATOR</span>
+            <span className="px-2 py-1 bg-blue-50 border border-blue-200 text-[#075BFF] font-bold rounded-md">EXECUTIVE</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Mapping metrics to all 8 core operational modules (Authorized View)
   const metrics = [
     { module: 'CRM', title: 'Active Leads', value: '24', change: '+12% this month', icon: Users, color: 'text-blue-600 bg-blue-50' },
     { module: 'Sales', title: 'Monthly Revenue', value: 'KES 2.84M', change: '+18.4% vs target', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
@@ -49,7 +121,7 @@ export default function Dashboard() {
         {metrics.map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200/80 flex flex-col justify-between group hover:border-gray-300 transition-colors cursor-default">
+            <div key={i} className="bg-white p-6 rounded-xl shadow-xs border border-gray-200/80 flex flex-col justify-between group hover:border-gray-300 transition-colors cursor-default">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-0.5">{stat.module}</span>
@@ -79,7 +151,7 @@ export default function Dashboard() {
         {/* Left Column: Charts & Activity (Span 2) */}
         <div className="lg:col-span-2 space-y-6">
           {/* Financial & Sales Chart Placeholder */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 flex flex-col justify-between min-h-[320px]">
+          <div className="bg-white rounded-xl shadow-xs border border-gray-200/80 p-6 flex flex-col justify-between min-h-[320px]">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-mavora-navy">Financial Performance & Cashflow (KES)</h3>
               <span className="text-xs text-gray-400 font-medium">Real-time telemetry</span>
@@ -92,7 +164,7 @@ export default function Dashboard() {
           </div>
 
           {/* Cross-Module Recent Activity */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6">
+          <div className="bg-white rounded-xl shadow-xs border border-gray-200/80 p-6">
             <h3 className="text-sm font-bold uppercase tracking-wider text-mavora-navy mb-4">Latest Operations Activity</h3>
             <div className="space-y-4">
               {[
@@ -120,7 +192,7 @@ export default function Dashboard() {
         {/* Right Column: Compliance & Alerts (Span 1) */}
         <div className="space-y-6">
           {/* Action Required / System Alerts */}
-          <div className="bg-white rounded-xl shadow-sm border border-rose-100 p-6">
+          <div className="bg-white rounded-xl shadow-xs border border-rose-100 p-6">
             <h3 className="text-sm font-bold uppercase tracking-wider text-mavora-navy mb-4 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-500" />
               Action Required
@@ -142,7 +214,7 @@ export default function Dashboard() {
           </div>
 
           {/* Compliance Status */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 flex flex-col justify-between">
+          <div className="bg-white rounded-xl shadow-xs border border-gray-200/80 p-6 flex flex-col justify-between">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-mavora-navy mb-4">Compliance & Gateways</h3>
               <div className="space-y-3">

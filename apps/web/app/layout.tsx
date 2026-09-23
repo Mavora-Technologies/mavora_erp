@@ -1,5 +1,7 @@
+// apps/web/app/layout.tsx
 import type { Metadata } from 'next';
 import './globals.css';
+import ProtectedRoute from '@/components/ProtectedRoute'; // Adjust path as needed
 
 export const metadata: Metadata = {
   title: 'Mavora ERP',
@@ -14,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-mavora-light text-mavora-charcoal font-sans antialiased min-h-screen">
-        {children}
+        <ProtectedRoute>
+          {children}
+        </ProtectedRoute>
       </body>
     </html>
   );

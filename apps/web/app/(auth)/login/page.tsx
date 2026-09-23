@@ -71,12 +71,31 @@ export default function LoginPage() {
         throw new Error(data.message || 'Authentication failed. Please verify your credentials.');
       }
 
+      const user = data.data.user;
+      const roleLower = (user?.role || user?.department || 'employee').toLowerCase().trim();
+
       localStorage.setItem('mavora_token', data.data.token);
-      localStorage.setItem('mavora_user', JSON.stringify(data.data.user));
-      router.push('/');
+      localStorage.setItem('mavora_user', JSON.stringify(user));
+
+      // Intelligent Role-Based Redirection
+      if (
+        roleLower === 'administrator' || 
+        roleLower === 'admin' || 
+        roleLower === 'super_admin' || 
+        roleLower === 'executive'
+      ) {
+        router.push('/'); // Executive Dashboard
+      } else if (roleLower.includes('sales')) {
+        router.push('/sales');
+      } else if (roleLower.includes('engineering') || roleLower.includes('engineer')) {
+        router.push('/projects');
+      } else if (roleLower.includes('operations') || roleLower.includes('administration')) {
+        router.push('/procurement');
+      } else {
+        router.push('/helpdesk'); // Default standard landing module
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred during authentication.');
-    } finally {
       setLoading(false);
     }
   };

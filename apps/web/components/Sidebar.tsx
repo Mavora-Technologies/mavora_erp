@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
@@ -47,34 +47,54 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   // Collapsed Desktop Mode state
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
 
-  // User Profile state with fallback defaults
+  // Dynamic User Profile state initialized without hardcoded placeholders
   const [user, setUser] = useState<{ name: string; role: string; initials: string }>({
-    name: 'Jacob Mongeri',
-    role: 'Administrator',
-    initials: 'JM'
+    name: '',
+    role: '',
+    initials: ''
   });
 
   // User Menu dropdown state
   const [showUserMenu, setShowUserMenu] = useState<boolean>(false);
 
-  // Load authenticated user data if available in localStorage
+  // Load authenticated user data directly from localStorage dynamically
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('mavora_user');
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
-        const fullName = parsed.name || parsed.fullName || 'Jacob Mongeri';
+        
+        // Derive name dynamically from DB fields
+        const fullName = parsed.name || `${parsed.firstName || ''} ${parsed.lastName || ''}`.trim() || 'User';
+        
+        // Resolve role cleanly across various backend database structures
+        const rawRole = parsed.role ?? parsed.roleName ?? parsed.user_role ?? parsed.roles;
+        let resolvedRole = 'User';
+
+        if (typeof rawRole === 'string' && rawRole.trim() !== '') {
+          resolvedRole = rawRole;
+        } else if (typeof rawRole === 'object' && rawRole !== null) {
+          if (Array.isArray(rawRole) && rawRole.length > 0) {
+            const first = rawRole[0];
+            resolvedRole = typeof first === 'string' ? first : (first?.name || first?.title || first?.role_name || 'User');
+          } else {
+            resolvedRole = rawRole.name || rawRole.title || rawRole.role_name || 'User';
+          }
+        }
+
+        // Compute user initials dynamically
         const initials = fullName
           .split(' ')
+          .filter(Boolean)
           .map((n: string) => n[0])
           .join('')
           .toUpperCase()
-          .slice(0, 2);
+          .slice(0, 2) || 'US';
 
         setUser({
           name: fullName,
-          role: parsed.role || 'Administrator',
-          initials: initials || 'JM'
+          role: resolvedRole,
+          initials: initials
         });
       }
     } catch {
@@ -88,8 +108,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     router.push('/login');
   };
 
-  // Grouped Navigation structure matching specifications
-  const navGroups: NavGroup[] = [
+  // Grouped Navigation structure
+  const ALL_NAV_GROUPS: NavGroup[] = [
     {
       group: 'OVERVIEW',
       items: [
@@ -127,7 +147,42 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   ];
 
-  // Enhanced active route detection (supports nested child routes)
+  // Dynamic Role-Based Access Control Filtering
+  const filteredNavGroups = useMemo(() => {
+    if (!user.role) return [];
+
+    const roleLower = user.role.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    // Define exact match checks for Super Admin, Administrator, and Executive
+    const isPrivilegedAdmin = 
+      roleLower === 'super_admin' || 
+      roleLower === 'administrator' || 
+      roleLower === 'admin' || 
+      roleLower === 'executive';
+
+    // SYSTEM (Settings) is universally accessible to all roles by default
+    const allowed: string[] = ['SYSTEM'];
+
+    if (isPrivilegedAdmin) {
+      // Privileged roles see everything
+      return ALL_NAV_GROUPS;
+    }
+
+    // Non-privileged roles never see 'OVERVIEW' (Dashboard)
+    if (roleLower.includes('sales')) {
+      allowed.push('BUSINESS');
+    } else if (roleLower.includes('operations') || roleLower.includes('administration')) {
+      allowed.push('OPERATIONS');
+    } else if (roleLower.includes('engineering') || roleLower.includes('engineer')) {
+      allowed.push('BUSINESS', 'OPERATIONS');
+    } else {
+      // Default fallback for standard employees
+      allowed.push('OPERATIONS');
+    }
+
+    return ALL_NAV_GROUPS.filter(g => allowed.includes(g.group));
+  }, [user.role]);
+
   const isRouteActive = (href: string) => {
     if (href === '/') {
       return pathname === '/';
@@ -146,7 +201,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         />
       )}
 
-      {/* Main Sidebar Drawer / Fixed Navigation */}
       <aside 
         aria-label="Main Navigation"
         className={`
@@ -159,14 +213,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           w-[260px] pointer-events-auto
         `}
       >
-        {/* 1. BRAND HEADER */}
+        {/* BRAND HEADER */}
         <div className="relative flex items-center justify-between h-20 px-4 bg-[#061A3A]/80 border-b border-slate-800/80 shrink-0">
           <Link 
             href="/" 
             onClick={onClose}
             className="flex items-center gap-3 overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#075BFF] rounded-lg p-1 transition-all"
           >
-            {/* Custom SVG Logo Mark matching official Mavora branding */}
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#075BFF] to-[#19D3C5] p-0.5 shrink-0 shadow-md shadow-[#075BFF]/20">
               <div className="w-full h-full bg-[#04152F] rounded-[9px] flex items-center justify-center">
                 <span className="font-black text-base text-transparent bg-clip-text bg-gradient-to-r from-[#075BFF] to-[#19D3C5]">
@@ -175,7 +228,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               </div>
             </div>
 
-            {/* Brand Title (Hidden when collapsed on desktop) */}
             <div className={`transition-opacity duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
               <div className="flex items-center gap-1.5">
                 <span className="text-base font-black tracking-wider text-white leading-none">MAVORA</span>
@@ -186,7 +238,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
           </Link>
 
-          {/* Mobile Close Button */}
           <button 
             onClick={onClose} 
             className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition lg:hidden cursor-pointer"
@@ -195,7 +246,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <X className="w-5 h-5" />
           </button>
 
-          {/* Desktop Collapse / Expand Toggle Button */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="hidden lg:flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 hover:bg-[#075BFF] text-slate-300 hover:text-white border border-slate-700/80 absolute -right-3 top-1/2 -translate-y-1/2 shadow-md transition-colors cursor-pointer"
@@ -205,16 +255,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* 2. NAVIGATION GROUPS & ITEMS */}
+        {/* NAVIGATION GROUPS & ITEMS */}
         <div className="flex-1 py-4 px-3 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
-          {navGroups.map((group) => (
+          {filteredNavGroups.map((group) => (
             <div key={group.group} className="space-y-1">
-              {/* Group Label */}
               <div className={`px-3 mb-2 text-[10px] font-extrabold tracking-widest text-slate-400 uppercase ${isCollapsed ? 'lg:hidden' : 'block'}`}>
                 {group.group}
               </div>
 
-              {/* Group Items */}
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = isRouteActive(item.href);
@@ -233,7 +281,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }
                       `}
                     >
-                      {/* Active Indicator Vertical Teal Line */}
                       {active && (
                         <span 
                           className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-[#19D3C5] rounded-r-full shadow-sm" 
@@ -241,15 +288,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         />
                       )}
 
-                      {/* Icon */}
                       <Icon className={`w-4 h-4 shrink-0 transition-colors ${active ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
 
-                      {/* Text Label */}
                       <span className={`truncate transition-opacity duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
                         {item.name}
                       </span>
 
-                      {/* Badge Counter */}
                       {item.badge !== undefined && (
                         <span className={`
                           ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold tracking-tight
@@ -264,7 +308,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       )}
                     </Link>
 
-                    {/* Collapsed Mode Tooltip */}
                     {isCollapsed && (
                       <div className="hidden lg:block absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-1.5 bg-[#061A3A] text-white text-xs font-semibold rounded-lg shadow-xl border border-slate-700/80 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50">
                         <div className="flex items-center gap-2">
@@ -284,7 +327,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           ))}
         </div>
 
-        {/* 8. SYSTEM STATUS & TELEMETRY */}
+        {/* SYSTEM STATUS */}
         <div className="px-4 py-2.5 bg-[#061A3A]/40 border-t border-slate-800/60 shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="relative flex h-2 w-2 shrink-0">
@@ -293,14 +336,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </span>
             <div className={`text-[10px] leading-tight transition-opacity duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
               <p className="font-bold text-white tracking-wide">System Online</p>
-              <p className="text-slate-400 font-medium text-[9px]">Mavora Enterprise Platform</p>
             </div>
           </div>
         </div>
 
-        {/* 7. USER PROFILE AREA */}
+        {/* DYNAMIC USER PROFILE AREA */}
         <div className="relative p-3 bg-[#061A3A] border-t border-slate-800/80 shrink-0">
-          {/* User Popover Menu */}
           {showUserMenu && (
             <div className="absolute bottom-full left-3 right-3 mb-2 bg-[#04152F] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-fade-in">
               <Link 
@@ -323,22 +364,21 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           <div className="flex items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5 min-w-0">
-              {/* User Avatar */}
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#075BFF] to-slate-700 flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm">
-                {user.initials}
+                {user.initials || '--'}
               </div>
 
-              {/* User Identity Details */}
               <div className={`min-w-0 transition-opacity duration-200 ${isCollapsed ? 'lg:hidden' : 'block'}`}>
-                <p className="text-xs font-bold text-white truncate leading-tight">{user.name}</p>
+                <p className="text-xs font-bold text-white truncate leading-tight">
+                  {user.name || 'Loading...'}
+                </p>
                 <p className="text-[10px] font-medium text-slate-400 truncate flex items-center gap-1 mt-0.5">
                   <ShieldCheck className="w-3 h-3 text-[#19D3C5] shrink-0" />
-                  <span>{user.role}</span>
+                  <span className="capitalize">{user.role || 'User'}</span>
                 </p>
               </div>
             </div>
 
-            {/* Menu Trigger Button */}
             <button
               onClick={() => setShowUserMenu(!showUserMenu)}
               className={`p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer ${isCollapsed ? 'lg:hidden' : 'block'}`}
@@ -348,7 +388,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </button>
           </div>
         </div>
-
       </aside>
     </>
   );
