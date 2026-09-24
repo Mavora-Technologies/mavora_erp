@@ -1,3 +1,4 @@
+// apps/api/src/modules/inventory/inventory.service.ts
 import { db, products } from '@mavora/database';
 import { eq, desc } from 'drizzle-orm';
 
@@ -24,6 +25,71 @@ export class InventoryService {
       throw { status: 404, message: 'Internal asset not found' };
     }
     return product;
+  }
+
+  // --- Corporate KPI Aggregation Engine ---
+  async getInventoryMetrics() {
+    const allProducts = await db.select().from(products);
+
+    const totalSkus = allProducts.length;
+    let totalAssetValue = 0;
+    let totalPhysicalUnits = 0;
+    let lowStockCount = 0;
+    let depletedCount = 0;
+
+    const departmentMap: Record<string, { count: number; totalValue: number }> = {};
+    const locationMap: Record<string, { count: number; totalValue: number }> = {};
+
+    for (const item of allProducts) {
+      const price = Number(item.costPrice) || 0;
+      const qty = item.stockQuantity || 0;
+      const itemVal = price * qty;
+
+      totalAssetValue += itemVal;
+      totalPhysicalUnits += qty;
+
+      if (qty === 0) {
+        depletedCount += 1;
+      } else if (qty <= item.reorderLevel) {
+        lowStockCount += 1;
+      }
+
+      // Department aggregation
+      const dept = item.department || 'Unassigned';
+      if (!departmentMap[dept]) {
+        departmentMap[dept] = { count: 0, totalValue: 0 };
+      }
+      departmentMap[dept].count += 1;
+      departmentMap[dept].totalValue += itemVal;
+
+      // Location aggregation
+      const loc = item.location || 'Unassigned';
+      if (!locationMap[loc]) {
+        locationMap[loc] = { count: 0, totalValue: 0 };
+      }
+      locationMap[loc].count += 1;
+      locationMap[loc].totalValue += itemVal;
+    }
+
+    const averageUnitCost = totalSkus > 0 ? totalAssetValue / (totalPhysicalUnits || 1) : 0;
+
+    return {
+      totalAssetValue,
+      totalSkus,
+      totalPhysicalUnits,
+      lowStockCount,
+      depletedCount,
+      healthyStockCount: totalSkus - (lowStockCount + depletedCount),
+      averageUnitCost,
+      departmentBreakdown: Object.entries(departmentMap).map(([department, data]) => ({
+        department,
+        ...data,
+      })),
+      locationBreakdown: Object.entries(locationMap).map(([location, data]) => ({
+        location,
+        ...data,
+      })),
+    };
   }
 
   async createProduct(data: CreateProductInput) {
@@ -68,7 +134,6 @@ export class InventoryService {
     return updatedProduct;
   }
 
-  // Increment stock when items are received (e.g. via LPO/Delivery)
   async adjustStock(id: string, quantityChange: number) {
     const [product] = await db.select().from(products).where(eq(products.id, id));
     if (!product) {

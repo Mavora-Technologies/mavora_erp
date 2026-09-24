@@ -1,9 +1,19 @@
+// apps/api/src/modules/inventory/inventory.controller.ts
 import { Request, Response, NextFunction } from 'express';
-import { inventoryService } from './inventory.service';
+import { inventoryService } from './inventory.service.js';
 
 export const getProducts = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await inventoryService.getAllProducts();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getInventoryMetrics = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await inventoryService.getInventoryMetrics();
     res.json({ success: true, data });
   } catch (error) {
     next(error);

@@ -1,3 +1,4 @@
+// apps/api/src/modules/settings/settings.service.ts
 import { db, settings } from '@mavora/database';
 import { eq } from 'drizzle-orm';
 

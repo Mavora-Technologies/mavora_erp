@@ -1,3 +1,4 @@
+// apps/api/src/modules/settings/settings.controller.ts
 import { Request, Response } from 'express';
 import { settingsService } from './settings.service.js';
 

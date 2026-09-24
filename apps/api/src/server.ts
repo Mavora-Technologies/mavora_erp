@@ -1,10 +1,11 @@
+// apps/api/src/server.ts
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import path from 'path';
 import routes from './routes/index.js'; 
-import { errorHandler } from './middleware/error.middleware.js';
+import { errorHandler } from './middlewares/error.middleware.js';
 
 // Only load local .env in development
 if (process.env.NODE_ENV !== 'production') {

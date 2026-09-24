@@ -10,6 +10,7 @@ import { hrmModule } from '../modules/hrm/hrm.module.js';
 import projectsRoutes from '../modules/projects/projects.routes.js';
 import financeRoutes from '../modules/finance/finance.routes.js';
 import settingsRoutes from '../modules/settings/settings.routes.js';
+import { usersModule } from '../modules/users/users.module.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use('/hrm', hrmModule.router);
 router.use('/projects', projectsRoutes);
 router.use('/finance', financeRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/users', usersModule.router);
 
 // Health Check Endpoint
 router.get('/health', (req, res) => {

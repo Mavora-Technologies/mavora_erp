@@ -1,7 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Package, Plus, AlertTriangle, Search, RefreshCw, Building2, Layers, ArrowDownLeft } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Package,
+  Plus,
+  AlertTriangle,
+  Search,
+  RefreshCw,
+  Building2,
+  Layers,
+  ArrowDownLeft,
+  Coins,
+  TrendingUp,
+  AlertOctagon,
+  PieChart,
+  Boxes,
+} from 'lucide-react';
 
 interface InternalAsset {
   id: string;
@@ -23,7 +37,7 @@ export default function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('ALL');
-  
+
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState<boolean>(false);
@@ -132,17 +146,60 @@ export default function InventoryPage() {
     }
   };
 
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.department?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const matchesSearch =
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.department?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesLocation = selectedLocation === 'ALL' || p.location === selectedLocation;
+      const matchesLocation = selectedLocation === 'ALL' || p.location === selectedLocation;
 
-    return matchesSearch && matchesLocation;
-  });
+      return matchesSearch && matchesLocation;
+    });
+  }, [products, searchQuery, selectedLocation]);
+
+  // --- Reactive Corporate Executive KPI Calculations ---
+  const kpiData = useMemo(() => {
+    let totalValue = 0;
+    let totalUnits = 0;
+    let lowStockCount = 0;
+    let depletedCount = 0;
+
+    const departmentMap: Record<string, number> = {};
+
+    filteredProducts.forEach((item) => {
+      const cost = Number(item.costPrice) || 0;
+      const qty = item.stockQuantity || 0;
+      const val = cost * qty;
+
+      totalValue += val;
+      totalUnits += qty;
+
+      if (qty === 0) {
+        depletedCount += 1;
+      } else if (qty <= item.reorderLevel) {
+        lowStockCount += 1;
+      }
+
+      const dept = item.department || 'General';
+      departmentMap[dept] = (departmentMap[dept] || 0) + val;
+    });
+
+    const topDepartment =
+      Object.entries(departmentMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+    return {
+      totalValuation: totalValue,
+      totalUnits,
+      uniqueSkus: filteredProducts.length,
+      lowStockCount,
+      depletedCount,
+      riskCount: lowStockCount + depletedCount,
+      topDepartment,
+    };
+  }, [filteredProducts]);
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -163,6 +220,67 @@ export default function InventoryPage() {
         >
           <Plus className="h-4 w-4" /> Register New Asset
         </button>
+      </div>
+
+      {/* Corporate Executive KPI Dashboard Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Gross Portfolio Valuation */}
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Gross Portfolio Value</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              Ksh {kpiData.totalValuation.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+            </p>
+
+          </div>
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+            <Coins className="h-6 w-6" />
+          </div>
+        </div>
+
+        {/* KPI 2: Asset Volume & SKUs */}
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Total Units & SKUs</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {kpiData.totalUnits.toLocaleString()} <span className="text-xs font-normal text-gray-500">Units</span>
+            </p>
+
+          </div>
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+            <Boxes className="h-6 w-6" />
+          </div>
+        </div>
+
+        {/* KPI 3: Stock Risk & Alert Status */}
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Supply Chain Risk Alert</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`text-xl font-bold ${kpiData.riskCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {kpiData.riskCount} Items
+              </span>
+            </div>
+
+          </div>
+          <div className={`p-3 rounded-xl ${kpiData.riskCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+            <AlertOctagon className="h-6 w-6" />
+          </div>
+        </div>
+
+        {/* KPI 4: Top Department Allocation */}
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Top Asset Allocation</p>
+            <p className="text-lg font-bold text-gray-900 mt-1 truncate max-w-[140px]" title={kpiData.topDepartment}>
+              {kpiData.topDepartment}
+            </p>
+
+          </div>
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
+            <PieChart className="h-6 w-6" />
+          </div>
+        </div>
       </div>
 
       {/* Corporate Filter Bar */}
