@@ -2,9 +2,17 @@
 import { Request, Response, NextFunction } from 'express';
 import { inventoryService } from './inventory.service.js';
 
-export const getProducts = async (req: Request, res: Response, next: NextFunction) => {
+// Extend Express Request to match the auth.middleware.ts user payload
+interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    roleId: string;
+  };
+}
+
+export const getItems = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await inventoryService.getAllProducts();
+    const data = await inventoryService.getAllItems();
     res.json({ success: true, data });
   } catch (error) {
     next(error);
@@ -20,10 +28,10 @@ export const getInventoryMetrics = async (req: Request, res: Response, next: Nex
   }
 };
 
-export const getProductById = async (req: Request, res: Response, next: NextFunction) => {
+export const getItemById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const data = await inventoryService.getProductById(id);
+    const data = await inventoryService.getItemById(id);
     res.json({ success: true, data });
   } catch (error: any) {
     if (error.status) {
@@ -33,33 +41,51 @@ export const getProductById = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-export const createProduct = async (req: Request, res: Response, next: NextFunction) => {
+export const createItem = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { sku, name, description, category, location, department, costPrice, stockQuantity, reorderLevel } = req.body;
+    const { 
+      sku, 
+      itemCode, 
+      name, 
+      description, 
+      categoryId, 
+      subcategoryId, 
+      costPrice, 
+      quantityOnHand, 
+      reorderLevel, 
+      defaultLocationId, 
+      defaultDepartmentId 
+    } = req.body;
 
-    if (!sku || !name || costPrice === undefined) {
+    // Extract user ID from auth middleware or body payload fallback
+    const performedById = req.user?.id || req.body.performedById;
+
+    if (!sku || !name || costPrice === undefined || !performedById) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: sku, name, and costPrice are required.',
+        message: 'Missing required fields: sku, name, costPrice, and performedById are required.',
       });
     }
 
-    const newProduct = await inventoryService.createProduct({
+    const newItem = await inventoryService.createItem({
       sku,
+      itemCode,
       name,
       description,
-      category,
-      location,
-      department,
+      categoryId,
+      subcategoryId,
+      defaultLocationId,
+      defaultDepartmentId,
       costPrice: Number(costPrice),
-      stockQuantity: stockQuantity !== undefined ? Number(stockQuantity) : undefined,
+      quantityOnHand: quantityOnHand !== undefined ? Number(quantityOnHand) : undefined,
       reorderLevel: reorderLevel !== undefined ? Number(reorderLevel) : undefined,
+      performedById,
     });
 
     res.status(201).json({
       success: true,
-      message: 'Internal asset registered successfully',
-      data: newProduct,
+      message: 'Inventory item registered successfully',
+      data: newItem,
     });
   } catch (error: any) {
     if (error.status) {
@@ -69,21 +95,14 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-export const updateStock = async (req: Request, res: Response, next: NextFunction) => {
+export const updateItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { stockQuantity } = req.body;
-
-    if (stockQuantity === undefined) {
-      return res.status(400).json({ success: false, message: 'Stock quantity field is required' });
-    }
-
-    const updatedProduct = await inventoryService.updateStock(id, Number(stockQuantity));
-
+    const updatedItem = await inventoryService.updateItem(id, req.body);
     res.json({
       success: true,
-      message: 'Asset stock level updated successfully',
-      data: updatedProduct,
+      message: 'Inventory item updated successfully',
+      data: updatedItem,
     });
   } catch (error: any) {
     if (error.status) {
@@ -93,21 +112,52 @@ export const updateStock = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-export const receiveStock = async (req: Request, res: Response, next: NextFunction) => {
+export const deleteItem = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { quantity } = req.body;
+    await inventoryService.deleteItem(id);
+    res.json({
+      success: true,
+      message: 'Inventory item deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
+};
 
-    if (quantity === undefined || isNaN(Number(quantity))) {
-      return res.status(400).json({ success: false, message: 'Valid received quantity is required' });
+export const adjustStock = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { quantityChange, reason } = req.body;
+    
+    // Extract user ID from auth middleware or body payload fallback
+    const performedById = req.user?.id || req.body.performedById;
+
+    if (quantityChange === undefined || isNaN(Number(quantityChange))) {
+      return res.status(400).json({ success: false, message: 'Valid quantityChange field is required' });
     }
 
-    const updatedProduct = await inventoryService.adjustStock(id, Number(quantity));
+    if (!performedById || !reason) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'performedById and reason are required for audit logging' 
+      });
+    }
+
+    const updatedItem = await inventoryService.adjustStock(
+      id, 
+      Number(quantityChange), 
+      performedById, 
+      reason
+    );
 
     res.json({
       success: true,
-      message: `Successfully received ${quantity} items into inventory stock`,
-      data: updatedProduct,
+      message: 'Inventory stock level adjusted successfully',
+      data: updatedItem,
     });
   } catch (error: any) {
     if (error.status) {

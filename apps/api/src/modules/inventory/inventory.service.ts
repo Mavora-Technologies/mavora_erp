@@ -1,37 +1,64 @@
 // apps/api/src/modules/inventory/inventory.service.ts
-import { db, products } from '@mavora/database';
-import { eq, desc } from 'drizzle-orm';
+import { db, inventoryItems, inventoryMovements, inventoryCategories, inventoryLocations, products } from '@mavora/database';
+import { eq, desc, and, or, isNull } from 'drizzle-orm';
 
-export interface CreateProductInput {
+export interface CreateInventoryItemInput {
   sku: string;
+  itemCode?: string;
   name: string;
   description?: string;
-  category?: string;
-  location?: string;
-  department?: string;
+  categoryId?: string;
+  subcategoryId?: string;
   costPrice: number;
-  stockQuantity?: number;
+  quantityOnHand?: number;
   reorderLevel?: number;
+  defaultLocationId?: string;
+  defaultDepartmentId?: string;
+  performedById: string; // Required for audit trailing
 }
 
 export class InventoryService {
-  async getAllProducts() {
-    return await db.select().from(products).orderBy(desc(products.createdAt));
+  /**
+   * Retrieves all active inventory items.
+   */
+  async getAllItems() {
+    return await db
+      .select()
+      .from(products) // <-- Pointing back to your populated legacy table
+      .orderBy(desc(products.createdAt));
   }
 
-  async getProductById(id: string) {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
-    if (!product) {
-      throw { status: 404, message: 'Internal asset not found' };
+  /**
+   * Retrieves a specific inventory item by ID.
+   */
+  async getItemById(id: string) {
+    const [item] = await db
+      .select()
+      .from(inventoryItems)
+      .where(eq(inventoryItems.id, id));
+
+    if (!item) {
+      throw { status: 404, message: 'Inventory item not found' };
     }
-    return product;
+    return item;
   }
 
-  // --- Corporate KPI Aggregation Engine ---
+  /**
+   * Corporate KPI Aggregation Engine
+   * Calculates real-time valuation and stock health metrics.
+   */
   async getInventoryMetrics() {
-    const allProducts = await db.select().from(products);
+    const allItems = await db
+      .select()
+      .from(inventoryItems)
+      .where(
+        or(
+          eq(inventoryItems.status, 'ACTIVE'),
+          isNull(inventoryItems.status)
+        )
+      );
 
-    const totalSkus = allProducts.length;
+    const totalSkus = allItems.length;
     let totalAssetValue = 0;
     let totalPhysicalUnits = 0;
     let lowStockCount = 0;
@@ -40,22 +67,24 @@ export class InventoryService {
     const departmentMap: Record<string, { count: number; totalValue: number }> = {};
     const locationMap: Record<string, { count: number; totalValue: number }> = {};
 
-    for (const item of allProducts) {
-      const price = Number(item.costPrice) || 0;
-      const qty = item.stockQuantity || 0;
+    for (const item of allItems) {
+      const price = Number(item.costPrice ?? (item as any).cost_price) || 0;
+      const qty = item.quantityOnHand ?? (item as any).quantity_on_hand ?? 0;
       const itemVal = price * qty;
 
       totalAssetValue += itemVal;
       totalPhysicalUnits += qty;
 
+      const reorderLimit = item.reorderLevel ?? (item as any).reorder_level ?? 5;
+
       if (qty === 0) {
         depletedCount += 1;
-      } else if (qty <= item.reorderLevel) {
+      } else if (qty <= reorderLimit) {
         lowStockCount += 1;
       }
 
       // Department aggregation
-      const dept = item.department || 'Unassigned';
+      const dept = item.defaultDepartmentId || (item as any).department || 'Unassigned';
       if (!departmentMap[dept]) {
         departmentMap[dept] = { count: 0, totalValue: 0 };
       }
@@ -63,7 +92,7 @@ export class InventoryService {
       departmentMap[dept].totalValue += itemVal;
 
       // Location aggregation
-      const loc = item.location || 'Unassigned';
+      const loc = item.defaultLocationId || (item as any).location || 'Unassigned';
       if (!locationMap[loc]) {
         locationMap[loc] = { count: 0, totalValue: 0 };
       }
@@ -92,66 +121,140 @@ export class InventoryService {
     };
   }
 
-  async createProduct(data: CreateProductInput) {
-    const [existingSku] = await db.select({ id: products.id }).from(products).where(eq(products.sku, data.sku));
+  /**
+   * Creates a new inventory item in the legacy products table.
+   */
+  async createItem(data: any) {
+    const [existingSku] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.sku, data.sku));
+      
     if (existingSku) {
-      throw { status: 400, message: 'Asset with this SKU already exists' };
+      throw { status: 400, message: 'Item with this SKU already exists' };
     }
 
-    const [newProduct] = await db
+    const [newItem] = await db
       .insert(products)
       .values({
         sku: data.sku,
         name: data.name,
         description: data.description || null,
-        category: data.category || 'General Supplies',
+        category: data.category || 'General', 
         location: data.location || 'Nairobi HQ',
         department: data.department || 'Operations',
         costPrice: data.costPrice.toString(),
-        stockQuantity: data.stockQuantity ?? 0,
-        reorderLevel: data.reorderLevel ?? 5,
-      } as any)
+        stockQuantity: Number(data.stockQuantity ?? data.quantityOnHand ?? 0),
+        reorderLevel: Number(data.reorderLevel ?? 5),
+      })
       .returning();
 
-    return newProduct;
+    return newItem;
   }
 
-  async updateStock(id: string, stockQuantity: number) {
-    if (stockQuantity < 0) {
-      throw { status: 400, message: 'Stock quantity cannot be negative' };
+  /**
+   * Updates an existing inventory item in the legacy products table.
+   */
+  async updateItem(id: string, data: any) {
+    const [existing] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.id, id));
+
+    if (!existing) {
+      throw { status: 404, message: 'Inventory item not found' };
     }
 
-    const [updatedProduct] = await db
+    const [updatedItem] = await db
       .update(products)
-      .set({ stockQuantity, updatedAt: new Date() })
+      .set({
+        sku: data.sku,
+        name: data.name,
+        description: data.description || null,
+        category: data.category || 'General',
+        location: data.location || 'Nairobi HQ',
+        department: data.department || 'Operations',
+        costPrice: data.costPrice !== undefined ? data.costPrice.toString() : undefined,
+        stockQuantity: data.stockQuantity !== undefined ? Number(data.stockQuantity) : undefined,
+        reorderLevel: data.reorderLevel !== undefined ? Number(data.reorderLevel) : undefined,
+        updatedAt: new Date(),
+      })
       .where(eq(products.id, id))
       .returning();
 
-    if (!updatedProduct) {
-      throw { status: 404, message: 'Asset not found' };
-    }
-
-    return updatedProduct;
+    return updatedItem;
   }
 
-  async adjustStock(id: string, quantityChange: number) {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
-    if (!product) {
-      throw { status: 404, message: 'Asset not found' };
+  /**
+   * Deletes an inventory item from the legacy products table.
+   */
+  async deleteItem(id: string) {
+    const [existing] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.id, id));
+
+    if (!existing) {
+      throw { status: 404, message: 'Inventory item not found' };
     }
 
-    const newQuantity = product.stockQuantity + quantityChange;
-    if (newQuantity < 0) {
-      throw { status: 400, message: 'Resulting stock quantity cannot be negative' };
+    await db
+      .delete(products)
+      .where(eq(products.id, id));
+
+    return { success: true, message: 'Item deleted successfully' };
+  }
+
+  /**
+   * Adjusts stock up or down and writes to the immutable movement ledger.
+   */
+  async adjustStock(id: string, quantityChange: number, performedById: string, reason: string) {
+    if (quantityChange === 0) {
+      throw { status: 400, message: 'Quantity change must be non-zero' };
     }
 
-    const [updatedProduct] = await db
-      .update(products)
-      .set({ stockQuantity: newQuantity, updatedAt: new Date() })
-      .where(eq(products.id, id))
-      .returning();
+    return await db.transaction(async (tx) => {
+      const [item] = await tx
+        .select()
+        .from(inventoryItems)
+        .where(eq(inventoryItems.id, id));
 
-    return updatedProduct;
+      if (!item) {
+        throw { status: 404, message: 'Inventory item not found' };
+      }
+
+      const newQuantity = item.quantityOnHand + quantityChange;
+      if (newQuantity < 0) {
+        throw { status: 400, message: 'Resulting stock quantity cannot be negative' };
+      }
+
+      // Update the master record
+      const [updatedItem] = await tx
+        .update(inventoryItems)
+        .set({ 
+          quantityOnHand: newQuantity,
+          quantityAvailable: item.quantityAvailable + quantityChange, 
+          updatedAt: new Date() 
+        })
+        .where(eq(inventoryItems.id, id))
+        .returning();
+
+      // Log the movement ledger entry
+      await tx.insert(inventoryMovements).values({
+        inventoryItemId: item.id,
+        movementType: quantityChange > 0 ? 'ADJUSTMENT' : 'STOCK_ISSUE',
+        quantity: Math.abs(quantityChange),
+        quantityBefore: item.quantityOnHand,
+        quantityAfter: newQuantity,
+        unitCost: item.costPrice,
+        fromLocationId: quantityChange < 0 ? item.defaultLocationId : null,
+        toLocationId: quantityChange > 0 ? item.defaultLocationId : null,
+        performedById,
+        reason,
+      });
+
+      return updatedItem;
+    });
   }
 }
 
